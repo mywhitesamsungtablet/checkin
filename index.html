@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Check-in</title>
+  <title>Check in</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="apple-touch-icon" href="data:image/png;base64,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">
-  <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAABY0lEQVR4nGP8//8/Ay0BE01NZxi1gAgwGgeDPoietbdfMTC4YmDw484duOD/378fZGRAxG/7+/959458CzDB/3//HpeXfzlxgoGBgVVCQmHmTBYhIQaqWfD//9O6uk/79jEwMLAICyvOmsUqIYFfB2kWPGtv/7BlCwMDAzMfn8L06WxycgS1kGDBy0mT3q1aBdLDySk/ZQqHmhoxuliINP3N/Pkftm6FsEVTU7n09IjUSKwPPsBMZ2BgeLdy5b+vX6lsAQSwKyoyMDD8fvny5eTJDFS3QKKoSHHWLCZOTgYGhrerVn2/fJmaFohnZ4vExbGIioomJ4P4//49bWr6//cv1SzgdXSEMERiY9mkpRkYGH7cvv1mwQKqWQAHjOzsEoWFEPbrWbN+PX7MQPXCjs/FhdvUFBROP38+a2mhvgUMDAySZWWMTCC9X06e/LB5Mx6VjKPNlsFeo1EORi0gCGgeRAA003EfBa5w4AAAAABJRU5ErkJggg==">
+  <link rel="apple-touch-icon" href="data:image/png;base64,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">
+  <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAABz0lEQVR4nGP8//8/Ay0BE01NZxi1YDDEAQsuib+fP1+3tYWweW1t5SdPRlPw7dKlB+np/75/h3A51NUV585l5uGhjg9+3LjxMDsbbjq7goLCjBmYppNpwc/79x9kZv79/BnCZZWUVJg5k0VQEKtiki349eTJ/bS0P+/fQ7gsIiKKs2axiovjUk+aBb9fvnyQlvbn9WsIl5mfX2HGDDZZWTxaSLDgz7t3D9LTfz17BtXJza0wbRqHigp+XcRa8PfTpwcZGT8fPIBqY2eXnzSJU1uboEaiLPj37duD7Owft27BRYSjoriNjYnRS5QFX8+e/X75MrLIuzVr/rx5QzULMMHfz5+fd3YyUN0CoeBgRlZWCPvj7t2fDx6kpgWiqalStbUiMTFwkWdtbf++fqWOBaKpqeLZ2RAGi6goRPD3y5cvMcoocizgNjaGmA7SwMUlUVAAl3q7atW3S5cotYCJiwuZK+DtzaWvD+X8+/esqen/nz8UWYAJJMvLGZigen/cufNm/nwG6lrAqaUlGBAA576aPRueyaljAQMDg3huLjMvL4T9/9evZ83NDNhaQORbwCIoKJaRAed+PXv23bp1mMoYRxtehMBo05EgoHkQAQDQI6CdibpohAAAAABJRU5ErkJggg==">
   <meta name="theme-color" content="#0e8a78">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Check-in">
+  <meta name="apple-mobile-web-app-title" content="Check in">
   <style>
     * { box-sizing: border-box; }
     body {
@@ -47,19 +47,21 @@
 
     /* ---- main SEND button: 2x size, raised 3D, presses down on tap ---- */
     #sendBtn {
-      margin-top: 26px; padding: 32px 20px;
-      font-size: 27px; font-weight: 800; letter-spacing: .5px;
+      display: flex; align-items: center; justify-content: center; text-align: center;
+      width: 250px; height: 250px; max-width: 84%;
+      margin: 30px auto 10px; padding: 0;
+      font-size: 36px; font-weight: 800; letter-spacing: 3px;
       background: linear-gradient(180deg, #14a891 0%, #0e8a78 100%);
-      border-radius: 20px;
-      box-shadow: 0 9px 0 #095046, 0 16px 26px rgba(0,0,0,.30);
+      border-radius: 30px;
+      box-shadow: 0 13px 0 #095046, 0 24px 36px rgba(0,0,0,.32);
       transition: transform .06s ease, box-shadow .06s ease;
     }
     #sendBtn:active:not(:disabled) {
-      transform: translateY(7px);
-      box-shadow: 0 2px 0 #095046, 0 5px 12px rgba(0,0,0,.25);
+      transform: translateY(10px);
+      box-shadow: 0 3px 0 #095046, 0 8px 16px rgba(0,0,0,.26);
     }
     #sendBtn:disabled {
-      background: #9bbdb6; box-shadow: 0 5px 0 #7fa69e; cursor: default;
+      background: #9bbdb6; box-shadow: 0 7px 0 #7fa69e; cursor: default;
     }
 
     .err { color: #d33; font-size: 13px; margin-top: 12px; min-height: 16px; text-align: center; }
@@ -84,7 +86,7 @@
   <div class="card">
     <!-- main view -->
     <div id="mainView">
-      <h1>Check-in</h1>
+      <h1>Check in</h1>
       <p class="note">Tap the button below to send your info (your location will be requested).</p>
 
       <div id="phoneRow">
@@ -93,7 +95,7 @@
                name="phone" placeholder="08X-XXX-XXXX" maxlength="15">
       </div>
 
-      <button id="sendBtn" onclick="startSend()">📍 Send</button>
+      <button id="sendBtn" onclick="startSend()">SEND</button>
       <div class="status" id="status"></div>
       <div class="err" id="err"></div>
     </div>
@@ -202,7 +204,7 @@
 
     function startSend() {
       var btn = document.getElementById('sendBtn');
-      btn.disabled = true; btn.textContent = 'Sending…'; setErr('');
+      btn.disabled = true; btn.textContent = 'SENDING…'; setErr('');
 
       if (navigator.geolocation) {
         setStatus('Requesting location… (tap "Allow")');
@@ -251,7 +253,7 @@
 
     function resetBtn() {
       var btn = document.getElementById('sendBtn');
-      btn.disabled = false; btn.textContent = '📍 Send'; setStatus('');
+      btn.disabled = false; btn.textContent = 'SEND'; setStatus('');
     }
 
     function showDone() {
