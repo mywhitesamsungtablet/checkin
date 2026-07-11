@@ -63,6 +63,22 @@
     #sendBtn:disabled {
       background: #9bbdb6; box-shadow: 0 7px 0 #7fa69e; cursor: default;
     }
+    /* ---- "SENDING" working state: spinner + stays green ---- */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes btnPulse { 0%,100% { box-shadow: 0 13px 0 #095046, 0 24px 36px rgba(0,0,0,.32); }
+                          50%      { box-shadow: 0 13px 0 #095046, 0 24px 42px rgba(0,0,0,.42); } }
+    #sendBtn.sending {
+      flex-direction: column;
+      font-size: 22px; letter-spacing: 4px; cursor: default;
+      background: linear-gradient(180deg, #14a891 0%, #0e8a78 100%);
+      animation: btnPulse 1.3s ease-in-out infinite;
+    }
+    #sendBtn.sending .spinner {
+      width: 50px; height: 50px; margin-bottom: 16px;
+      border: 5px solid rgba(255,255,255,.35);
+      border-top-color: #fff; border-radius: 50%;
+      animation: spin .75s linear infinite;
+    }
 
     .err { color: #d33; font-size: 13px; margin-top: 12px; min-height: 16px; text-align: center; }
     .status { font-size: 13px; color: #0b6b5f; text-align: center; margin-top: 12px; min-height: 16px; }
@@ -210,7 +226,8 @@
 
     function startSend() {
       var btn = document.getElementById('sendBtn');
-      btn.disabled = true; btn.textContent = 'SENDING…'; setErr('');
+      btn.disabled = true; btn.classList.add('sending');
+      btn.innerHTML = '<span class="spinner"></span>SENDING'; setErr('');
 
       if (navigator.geolocation) {
         setStatus('Requesting location… (tap "Allow")');
@@ -259,7 +276,8 @@
 
     function resetBtn() {
       var btn = document.getElementById('sendBtn');
-      btn.disabled = false; btn.textContent = 'SEND'; setStatus('');
+      btn.disabled = false; btn.classList.remove('sending');
+      btn.textContent = 'SEND'; setStatus('');
     }
 
     function showDone() {
