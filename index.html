@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>เช็คอิน / ส่งข้อมูล</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" href="favicon.png">
+  <meta name="theme-color" content="#0e8a78">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="เช็คอิน">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, "Segoe UI", "Sarabun", Tahoma, sans-serif;
+      margin: 0; padding: 0;
+      background: linear-gradient(160deg, #0b6b5f 0%, #0e8a78 100%);
+      min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      color: #1a1a1a;
+    }
+    .card {
+      background: #fff; width: 100%; max-width: 420px;
+      margin: 16px; padding: 28px 24px 24px;
+      border-radius: 18px; box-shadow: 0 12px 40px rgba(0,0,0,.25);
+    }
+    h1 { font-size: 22px; margin: 0 0 4px; color: #0b6b5f; text-align: center; }
+    .note { font-size: 14px; color: #666; text-align: center; margin: 0 0 20px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin: 4px 0 6px; color: #444; }
+    input {
+      width: 100%; font-size: 17px; padding: 12px 14px;
+      border: 1.5px solid #cfd8d5; border-radius: 11px; outline: none;
+      -webkit-appearance: none;
+    }
+    input:focus { border-color: #0e8a78; box-shadow: 0 0 0 3px rgba(14,138,120,.15); }
+    input.locked { background: #ececec; color: #777; border-color: #d8d8d8; }
+    .editlink { color: #0e8a78; font-weight: 600; font-size: 12px; margin-left: 8px; cursor: pointer; }
+    button {
+      width: 100%; margin-top: 18px; padding: 16px;
+      font-size: 18px; font-weight: 700; color: #fff;
+      background: #0e8a78; border: 0; border-radius: 12px; cursor: pointer;
+    }
+    button:disabled { background: #9bbdb6; cursor: default; }
+    .err { color: #d33; font-size: 13px; margin-top: 10px; min-height: 16px; text-align: center; }
+    .status { font-size: 13px; color: #0b6b5f; text-align: center; margin-top: 10px; min-height: 16px; }
+    .done { text-align: center; padding: 16px 0; }
+    .done .check {
+      width: 72px; height: 72px; border-radius: 50%;
+      background: #0e8a78; color: #fff; font-size: 42px; line-height: 72px; margin: 0 auto 14px;
+    }
+    .done h2 { color: #0b6b5f; margin: 0 0 6px; }
+    .done p { color: #666; margin: 0; font-size: 14px; }
+    .summary { text-align: left; font-size: 13px; color: #555; margin-top: 14px;
+               background: #f4f6f5; border-radius: 10px; padding: 12px 14px; }
+    .summary div { margin: 3px 0; word-break: break-all; }
+    .a2hs { margin-top: 14px; }
+    .a2hs-hint { font-size: 13px; color: #555; margin-top: 10px; line-height: 1.5;
+                 background: #f4f6f5; border-radius: 8px; padding: 10px 12px; text-align: center; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <!-- หน้าหลัก -->
+    <div id="mainView">
+      <h1>เช็คอิน / ส่งข้อมูล</h1>
+      <p class="note">กดปุ่มด้านล่างเพื่อส่งข้อมูล (ระบบจะขอตำแหน่งของคุณ)</p>
+
+      <label for="phone">เบอร์มือถือ <span class="editlink hidden" id="phoneEdit" onclick="unlockPhone()">เปลี่ยน</span></label>
+      <input id="phone" type="tel" inputmode="numeric" autocomplete="tel"
+             name="phone" placeholder="08X-XXX-XXXX" maxlength="15">
+
+      <button id="sendBtn" onclick="startSend()">📍 ส่งข้อมูล</button>
+      <div class="status" id="status"></div>
+      <div class="err" id="err"></div>
+    </div>
+
+    <!-- หน้าขอบคุณ -->
+    <div id="doneView" class="done hidden">
+      <div class="check">&#10003;</div>
+      <h2>ส่งข้อมูลเรียบร้อย</h2>
+      <p>ขอบคุณครับ</p>
+      <div class="summary" id="summary"></div>
+      <div class="a2hs hidden" id="a2hs"></div>
+    </div>
+  </div>
+
+  <script>
+    // ===== ตั้งค่า: URL ของ backend (Apps Script) ที่รับข้อมูล =====
+    var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxjSzSsAIfwTH_o0h0CyNIVmWa6NTO7sttwFOHCadBr_sLUQ1__a7SB3d5hX3QJjgRw/exec';
+    // ==============================================================
+
+    var payload = { phone: '', lat: '', lng: '', acc: '', map: '', device: '', browser: '', ip: '', deviceId: '' };
+
+    var deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferredPrompt = e; });
+
+    (function collectDevice() {
+      var ua = navigator.userAgent || '';
+      var os = 'ไม่ทราบ';
+      if (/Android/i.test(ua)) os = 'Android';
+      else if (/iPhone|iPad|iPod/i.test(ua)) os = 'iOS';
+      else if (/Windows/i.test(ua)) os = 'Windows';
+      else if (/Mac OS X/i.test(ua)) os = 'macOS';
+      else if (/Linux/i.test(ua)) os = 'Linux';
+
+      var model = '';
+      var m = ua.match(/;\s?([^;]+?)\s+Build\//);
+      if (m) model = m[1].trim();
+      else if (/iPhone/i.test(ua)) model = 'iPhone';
+      else if (/iPad/i.test(ua)) model = 'iPad';
+
+      var br = 'ไม่ทราบ';
+      if (/Edg/i.test(ua)) br = 'Edge';
+      else if (/OPR|Opera/i.test(ua)) br = 'Opera';
+      else if (/Line/i.test(ua)) br = 'LINE';
+      else if (/CriOS|Chrome/i.test(ua)) br = 'Chrome';
+      else if (/FxiOS|Firefox/i.test(ua)) br = 'Firefox';
+      else if (/Safari/i.test(ua)) br = 'Safari';
+
+      payload.device  = os + (model ? ' · ' + model : '');
+      payload.browser = br;
+      payload.deviceId = getDeviceId();
+    })();
+
+    // เบอร์: จาก URL (?p=) ก่อน ไม่งั้นจาก localStorage → เติม + ล็อกสีเทา
+    (function initPhone() {
+      var el = document.getElementById('phone');
+      var qp = new URLSearchParams(location.search);
+      var saved = (qp.get('p') || '').replace(/[^0-9]/g, '').slice(0, 15);
+      if (!saved) { try { saved = localStorage.getItem('__qr_phone__') || ''; } catch (e) {} }
+      if (saved) { el.value = saved; lockPhone(); }
+    })();
+
+    function lockPhone() {
+      var el = document.getElementById('phone');
+      el.readOnly = true; el.classList.add('locked');
+      var lk = document.getElementById('phoneEdit'); if (lk) lk.classList.remove('hidden');
+    }
+    function unlockPhone() {
+      var el = document.getElementById('phone');
+      el.readOnly = false; el.classList.remove('locked'); el.value = ''; el.focus();
+      var lk = document.getElementById('phoneEdit'); if (lk) lk.classList.add('hidden');
+    }
+
+    function getDeviceId() {
+      try {
+        var k = '__qr_device_id__';
+        var v = localStorage.getItem(k);
+        if (!v) {
+          v = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+              : (Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12));
+          localStorage.setItem(k, v);
+        }
+        return v;
+      } catch (e) { return ''; }
+    }
+
+    function enrichDevice() {
+      return new Promise(function (resolve) {
+        try {
+          if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+            navigator.userAgentData.getHighEntropyValues(['model', 'platform', 'platformVersion'])
+              .then(function (d) {
+                var os = d.platform || '';
+                var ver = d.platformVersion ? (' ' + String(d.platformVersion).split('.')[0]) : '';
+                var model = d.model || '';
+                if (os) payload.device = os + ver + (model ? ' · ' + model : '');
+                resolve();
+              })
+              .catch(function () { resolve(); });
+          } else { resolve(); }
+        } catch (e) { resolve(); }
+      });
+    }
+
+    function setStatus(t) { document.getElementById('status').textContent = t || ''; }
+    function setErr(t)    { document.getElementById('err').textContent = t || ''; }
+
+    function startSend() {
+      var btn = document.getElementById('sendBtn');
+      btn.disabled = true; btn.textContent = 'กำลังส่ง...'; setErr('');
+
+      if (navigator.geolocation) {
+        setStatus('กำลังขอตำแหน่ง... (กด "อนุญาต")');
+        navigator.geolocation.getCurrentPosition(function (pos) {
+          var c = pos.coords;
+          payload.lat = c.latitude.toFixed(6);
+          payload.lng = c.longitude.toFixed(6);
+          payload.acc = Math.round(c.accuracy);
+          payload.map = 'https://www.google.com/maps?q=' + c.latitude + ',' + c.longitude;
+          fetchIpThenSend();
+        }, function () {
+          setStatus('ไม่ได้ตำแหน่ง — ส่งข้อมูลอื่นต่อ');
+          fetchIpThenSend();
+        }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 });
+      } else { fetchIpThenSend(); }
+    }
+
+    function fetchIpThenSend() {
+      setStatus('กำลังส่งข้อมูล...');
+      payload.phone = (document.getElementById('phone').value || '').trim();
+      try { if (payload.phone) localStorage.setItem('__qr_phone__', payload.phone); } catch (e) {}
+      enrichDevice().then(function () {
+        try {
+          fetch('https://api.ipify.org?format=json')
+            .then(function (r) { return r.json(); })
+            .then(function (j) { payload.ip = (j && j.ip) || ''; })
+            .catch(function () {})
+            .then(submitNow, submitNow);
+        } catch (e) { submitNow(); }
+      });
+    }
+
+    // ส่งเข้า backend (Apps Script doPost) — POST แบบ text/plain (ไม่ต้อง preflight)
+    function submitNow() {
+      fetch(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) showDone();
+          else { setErr((res && res.error) || 'เกิดข้อผิดพลาด'); resetBtn(); }
+        })
+        .catch(function () {
+          // อ่าน response ไม่ได้ (CORS) แต่ข้อมูลถูกส่งไปแล้ว → ถือว่าสำเร็จ
+          showDone();
+        });
+    }
+
+    function resetBtn() {
+      var btn = document.getElementById('sendBtn');
+      btn.disabled = false; btn.textContent = '📍 ส่งข้อมูล'; setStatus('');
+    }
+
+    function showDone() {
+      document.getElementById('mainView').classList.add('hidden');
+      document.getElementById('doneView').classList.remove('hidden');
+      var s = document.getElementById('summary');
+      var rows = [];
+      if (payload.phone)  rows.push('<div>📱 เบอร์: ' + payload.phone + '</div>');
+      if (payload.lat)    rows.push('<div>📍 พิกัด: ' + payload.lat + ', ' + payload.lng +
+                                    ' (±' + payload.acc + ' ม.)</div>');
+      if (payload.map)    rows.push('<div>🗺️ <a href="' + payload.map + '" target="_blank">เปิดแผนที่</a></div>');
+      rows.push('<div>📟 อุปกรณ์: ' + payload.device + ' · ' + payload.browser + '</div>');
+      if (payload.ip)       rows.push('<div>🌐 IP: ' + payload.ip + '</div>');
+      if (payload.deviceId) rows.push('<div>🔑 รหัสอุปกรณ์: ' + payload.deviceId.slice(0, 8) + '…</div>');
+      s.innerHTML = rows.join('');
+      maybeShowA2HS();
+    }
+
+    // ปุ่ม "เพิ่มไอคอน APP" — Android ติดตั้งจริง (มี manifest), iOS แสดงวิธี
+    function maybeShowA2HS() {
+      try { if (localStorage.getItem('__qr_a2hs_done__')) return; } catch (e) {}
+      var box = document.getElementById('a2hs');
+      box.innerHTML =
+        '<button onclick="addIcon()">📲 เพิ่มไอคอน APP</button>' +
+        '<div class="a2hs-hint hidden" id="a2hsHint"></div>';
+      box.classList.remove('hidden');
+    }
+
+    function addIcon() {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.finally(function () {
+          deferredPrompt = null;
+          try { localStorage.setItem('__qr_a2hs_done__', '1'); } catch (e) {}
+        });
+        return;
+      }
+      var ua = navigator.userAgent || '';
+      var steps;
+      if (/iPhone|iPad|iPod/i.test(ua)) steps = 'แตะปุ่ม แชร์ ⬆️ (ด้านล่างจอ) → “เพิ่มไปยังหน้าจอโฮม”';
+      else if (/Android/i.test(ua)) steps = 'แตะเมนู ⋮ (มุมขวาบน) → “ติดตั้งแอป / เพิ่มไปที่หน้าจอหลัก”';
+      else steps = 'เมนูเบราว์เซอร์ → “ติดตั้ง / เพิ่มไปที่หน้าจอหลัก”';
+      var h = document.getElementById('a2hsHint');
+      h.textContent = steps; h.classList.remove('hidden');
+      try { localStorage.setItem('__qr_a2hs_done__', '1'); } catch (e) {}
+    }
+  </script>
+</body>
+</html>
