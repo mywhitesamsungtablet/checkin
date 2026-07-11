@@ -63,15 +63,20 @@
     #sendBtn:disabled {
       background: #9bbdb6; box-shadow: 0 7px 0 #7fa69e; cursor: default;
     }
-    /* ---- working state: readable status text inside the button ---- */
-    @keyframes btnPulse { 0%,100% { box-shadow: 0 13px 0 #095046, 0 24px 36px rgba(0,0,0,.32); }
-                          50%      { box-shadow: 0 13px 0 #095046, 0 24px 44px rgba(0,0,0,.44); } }
+    /* ---- working state: button stays pressed-down + "Sending" + faint live params ---- */
     #sendBtn.sending {
-      font-size: 21px; letter-spacing: .3px; line-height: 1.35;
-      padding: 0 18px; cursor: default;
+      flex-direction: column; padding: 0 16px; cursor: default;
       background: linear-gradient(180deg, #14a891 0%, #0e8a78 100%);
-      animation: btnPulse 1.2s ease-in-out infinite;
+      transform: translateY(10px);
+      box-shadow: 0 3px 0 #095046, 0 8px 16px rgba(0,0,0,.26);
     }
+    #sendBtn .s-title { font-size: 30px; font-weight: 800; letter-spacing: 1px; }
+    #sendBtn .s-params {
+      margin-top: 12px; font-size: 10.5px; font-weight: 500; line-height: 1.55;
+      letter-spacing: .2px; color: rgba(255,255,255,.6);
+      max-width: 100%; word-break: break-word;
+    }
+    #sendBtn .s-params div { margin: 1px 0; }
 
     .err { color: #d33; font-size: 13px; margin-top: 12px; min-height: 16px; text-align: center; }
     .status { font-size: 13px; color: #0b6b5f; text-align: center; margin-top: 12px; min-height: 16px; }
@@ -217,32 +222,35 @@
     function setStatus(t) { document.getElementById('status').textContent = t || ''; }
     function setErr(t)    { document.getElementById('err').textContent = t || ''; }
 
-    // Show a readable status message inside the button, with animated "..." dots
-    var dotsTimer = null, dotsMsg = '';
-    function btnMsg(text) {
-      dotsMsg = text;
+    // Working state: button reads "Sending" with a small faint list of the params being sent
+    function renderSending() {
       var b = document.getElementById('sendBtn');
       b.classList.add('sending');
-      if (dotsTimer) return;         // already animating — just swapped the message
-      var n = 0;
-      function tick() { n = (n + 1) % 4; b.textContent = dotsMsg + '.'.repeat(n); }
-      tick();
-      dotsTimer = setInterval(tick, 450);
+      var p = payload;
+      var phone = (document.getElementById('phone').value || '').trim();
+      var rows = [];
+      if (p.device)   rows.push('<div>📟 ' + p.device + ' · ' + p.browser + '</div>');
+      if (phone)      rows.push('<div>📱 ' + phone + '</div>');
+      if (p.lat)      rows.push('<div>📍 ' + p.lat + ', ' + p.lng + '</div>');
+      if (p.ip)       rows.push('<div>🌐 ' + p.ip + '</div>');
+      if (p.deviceId) rows.push('<div>🔑 ' + p.deviceId.slice(0, 8) + '…</div>');
+      b.innerHTML = '<span class="s-title">Sending</span>' +
+                    '<div class="s-params">' + rows.join('') + '</div>';
     }
-    function btnMsgStop() { if (dotsTimer) { clearInterval(dotsTimer); dotsTimer = null; } }
 
     function startSend() {
       var btn = document.getElementById('sendBtn');
       btn.disabled = true; setErr('');
+      renderSending();
 
       if (navigator.geolocation) {
-        btnMsg('Requesting location');
         navigator.geolocation.getCurrentPosition(function (pos) {
           var c = pos.coords;
           payload.lat = c.latitude.toFixed(6);
           payload.lng = c.longitude.toFixed(6);
           payload.acc = Math.round(c.accuracy);
           payload.map = 'https://www.google.com/maps?q=' + c.latitude + ',' + c.longitude;
+          renderSending();
           fetchIpThenSend();
         }, function () {
           fetchIpThenSend();
@@ -251,15 +259,17 @@
     }
 
     function fetchIpThenSend() {
-      btnMsg('Sending');
       payload.phone = (document.getElementById('phone').value || '').trim();
       try { if (payload.phone) localStorage.setItem('__qr_phone__', payload.phone); } catch (e) {}
+      renderSending();
       enrichDevice().then(function () {
+        renderSending();
         try {
           fetch('https://api.ipify.org?format=json')
             .then(function (r) { return r.json(); })
             .then(function (j) { payload.ip = (j && j.ip) || ''; })
             .catch(function () {})
+            .then(function () { renderSending(); })
             .then(submitNow, submitNow);
         } catch (e) { submitNow(); }
       });
@@ -281,13 +291,11 @@
 
     function resetBtn() {
       var btn = document.getElementById('sendBtn');
-      btnMsgStop();
       btn.disabled = false; btn.classList.remove('sending');
       btn.textContent = 'SEND'; setStatus('');
     }
 
     function showDone() {
-      btnMsgStop();
       document.getElementById('mainView').classList.add('hidden');
       document.getElementById('doneView').classList.remove('hidden');
       var s = document.getElementById('summary');
