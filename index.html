@@ -63,21 +63,14 @@
     #sendBtn:disabled {
       background: #9bbdb6; box-shadow: 0 7px 0 #7fa69e; cursor: default;
     }
-    /* ---- "SENDING" working state: spinner + stays green ---- */
-    @keyframes spin { to { transform: rotate(360deg); } }
+    /* ---- working state: readable status text inside the button ---- */
     @keyframes btnPulse { 0%,100% { box-shadow: 0 13px 0 #095046, 0 24px 36px rgba(0,0,0,.32); }
-                          50%      { box-shadow: 0 13px 0 #095046, 0 24px 42px rgba(0,0,0,.42); } }
+                          50%      { box-shadow: 0 13px 0 #095046, 0 24px 44px rgba(0,0,0,.44); } }
     #sendBtn.sending {
-      flex-direction: column;
-      font-size: 22px; letter-spacing: 4px; cursor: default;
+      font-size: 21px; letter-spacing: .3px; line-height: 1.35;
+      padding: 0 18px; cursor: default;
       background: linear-gradient(180deg, #14a891 0%, #0e8a78 100%);
-      animation: btnPulse 1.3s ease-in-out infinite;
-    }
-    #sendBtn.sending .spinner {
-      width: 50px; height: 50px; margin-bottom: 16px;
-      border: 5px solid rgba(255,255,255,.35);
-      border-top-color: #fff; border-radius: 50%;
-      animation: spin .75s linear infinite;
+      animation: btnPulse 1.2s ease-in-out infinite;
     }
 
     .err { color: #d33; font-size: 13px; margin-top: 12px; min-height: 16px; text-align: center; }
@@ -224,13 +217,26 @@
     function setStatus(t) { document.getElementById('status').textContent = t || ''; }
     function setErr(t)    { document.getElementById('err').textContent = t || ''; }
 
+    // Show a readable status message inside the button, with animated "..." dots
+    var dotsTimer = null, dotsMsg = '';
+    function btnMsg(text) {
+      dotsMsg = text;
+      var b = document.getElementById('sendBtn');
+      b.classList.add('sending');
+      if (dotsTimer) return;         // already animating — just swapped the message
+      var n = 0;
+      function tick() { n = (n + 1) % 4; b.textContent = dotsMsg + '.'.repeat(n); }
+      tick();
+      dotsTimer = setInterval(tick, 450);
+    }
+    function btnMsgStop() { if (dotsTimer) { clearInterval(dotsTimer); dotsTimer = null; } }
+
     function startSend() {
       var btn = document.getElementById('sendBtn');
-      btn.disabled = true; btn.classList.add('sending');
-      btn.innerHTML = '<span class="spinner"></span>SENDING'; setErr('');
+      btn.disabled = true; setErr('');
 
       if (navigator.geolocation) {
-        setStatus('Requesting location… (tap "Allow")');
+        btnMsg('Requesting location');
         navigator.geolocation.getCurrentPosition(function (pos) {
           var c = pos.coords;
           payload.lat = c.latitude.toFixed(6);
@@ -239,14 +245,13 @@
           payload.map = 'https://www.google.com/maps?q=' + c.latitude + ',' + c.longitude;
           fetchIpThenSend();
         }, function () {
-          setStatus('Location unavailable — sending the rest');
           fetchIpThenSend();
         }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 });
       } else { fetchIpThenSend(); }
     }
 
     function fetchIpThenSend() {
-      setStatus('Sending…');
+      btnMsg('Sending');
       payload.phone = (document.getElementById('phone').value || '').trim();
       try { if (payload.phone) localStorage.setItem('__qr_phone__', payload.phone); } catch (e) {}
       enrichDevice().then(function () {
@@ -276,11 +281,13 @@
 
     function resetBtn() {
       var btn = document.getElementById('sendBtn');
+      btnMsgStop();
       btn.disabled = false; btn.classList.remove('sending');
       btn.textContent = 'SEND'; setStatus('');
     }
 
     function showDone() {
+      btnMsgStop();
       document.getElementById('mainView').classList.add('hidden');
       document.getElementById('doneView').classList.remove('hidden');
       var s = document.getElementById('summary');
