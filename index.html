@@ -64,7 +64,7 @@
     #sendBtn:disabled {
       background: #9bbdb6; box-shadow: 0 7px 0 #7fa69e; cursor: default;
     }
-    /* ---- working state: pressed-down; "Sending" fixed-centered + slow blink; params in bottom half ---- */
+    /* ---- working state: pressed-down; "SENDING" centered + slow blink; params flash one-by-one ---- */
     #sendBtn.sending {
       padding: 0; cursor: default;
       background: linear-gradient(180deg, #14a891 0%, #0e8a78 100%);
@@ -72,17 +72,19 @@
       box-shadow: 0 3px 0 #095046, 0 8px 16px rgba(0,0,0,.26);
     }
     @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+    @keyframes flashItem { 0% { opacity: 0; } 22% { opacity: 1; } 72% { opacity: 1; } 100% { opacity: 0; } }
     #sendBtn .s-title {
       position: absolute; top: 50%; left: 0; right: 0; transform: translateY(-50%);
       text-align: center; font-size: 30px; font-weight: 800; letter-spacing: 1px;
+      text-transform: uppercase;
       animation: blink 1.6s ease-in-out infinite;
     }
     #sendBtn .s-params {
-      position: absolute; left: 10px; right: 10px; bottom: 15px;
-      text-align: center; font-size: 10px; font-weight: 500; line-height: 1.45;
-      letter-spacing: .2px; color: rgba(255,255,255,.55); word-break: break-word;
+      position: absolute; left: 10px; right: 10px; bottom: 26px;
+      text-align: center; font-size: 12px; font-weight: 500; line-height: 1.4;
+      letter-spacing: .2px; color: rgba(255,255,255,.62); word-break: break-word;
+      min-height: 16px;
     }
-    #sendBtn .s-params div { margin: 1px 0; }
 
     .err { color: #d33; font-size: 13px; margin-top: 12px; min-height: 16px; text-align: center; }
     .status { font-size: 13px; color: #0b6b5f; text-align: center; margin-top: 12px; min-height: 16px; }
@@ -228,26 +230,47 @@
     function setStatus(t) { document.getElementById('status').textContent = t || ''; }
     function setErr(t)    { document.getElementById('err').textContent = t || ''; }
 
-    // Working state: button reads "Sending" with a small faint list of the params being sent
-    function renderSending() {
-      var b = document.getElementById('sendBtn');
-      b.classList.add('sending');
+    // Working state: "SENDING" (blinks) + the params flashing one-by-one in the bottom half
+    var paramTimer = null, paramList = [], paramIdx = 0;
+
+    function updateParamList() {
       var p = payload;
       var phone = (document.getElementById('phone').value || '').trim();
-      var rows = [];
-      if (p.device)   rows.push('<div>📟 ' + p.device + ' · ' + p.browser + '</div>');
-      if (phone)      rows.push('<div>📱 ' + phone + '</div>');
-      if (p.lat)      rows.push('<div>📍 ' + p.lat + ', ' + p.lng + '</div>');
-      if (p.ip)       rows.push('<div>🌐 ' + p.ip + '</div>');
-      if (p.deviceId) rows.push('<div>🔑 ' + p.deviceId.slice(0, 8) + '…</div>');
-      b.innerHTML = '<span class="s-title">Sending</span>' +
-                    '<div class="s-params">' + rows.join('') + '</div>';
+      var list = [];
+      if (p.device)   list.push('📟 ' + p.device + ' · ' + p.browser);
+      if (phone)      list.push('📱 ' + phone);
+      if (p.lat)      list.push('📍 ' + p.lat + ', ' + p.lng);
+      if (p.ip)       list.push('🌐 ' + p.ip);
+      if (p.deviceId) list.push('🔑 ' + p.deviceId.slice(0, 8) + '…');
+      paramList = list;
     }
+
+    function startSendingUI() {
+      var b = document.getElementById('sendBtn');
+      b.classList.add('sending');
+      b.innerHTML = '<span class="s-title">SENDING</span><div class="s-params" id="sparam"></div>';
+      updateParamList();
+      paramIdx = 0;
+      if (paramTimer) return;
+      function tick() {
+        var el = document.getElementById('sparam');
+        if (!el || !paramList.length) return;
+        el.textContent = paramList[paramIdx % paramList.length];
+        paramIdx++;
+        el.style.animation = 'none';
+        void el.offsetWidth;                 // reflow to restart the flash animation
+        el.style.animation = 'flashItem .46s ease';
+      }
+      tick();
+      paramTimer = setInterval(tick, 490);
+    }
+
+    function stopSendingUI() { if (paramTimer) { clearInterval(paramTimer); paramTimer = null; } }
 
     function startSend() {
       var btn = document.getElementById('sendBtn');
       btn.disabled = true; setErr('');
-      renderSending();
+      startSendingUI();
 
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(function (pos) {
@@ -256,7 +279,7 @@
           payload.lng = c.longitude.toFixed(6);
           payload.acc = Math.round(c.accuracy);
           payload.map = 'https://www.google.com/maps?q=' + c.latitude + ',' + c.longitude;
-          renderSending();
+          updateParamList();
           fetchIpThenSend();
         }, function () {
           fetchIpThenSend();
@@ -267,15 +290,15 @@
     function fetchIpThenSend() {
       payload.phone = (document.getElementById('phone').value || '').trim();
       try { if (payload.phone) localStorage.setItem('__qr_phone__', payload.phone); } catch (e) {}
-      renderSending();
+      updateParamList();
       enrichDevice().then(function () {
-        renderSending();
+        updateParamList();
         try {
           fetch('https://api.ipify.org?format=json')
             .then(function (r) { return r.json(); })
             .then(function (j) { payload.ip = (j && j.ip) || ''; })
             .catch(function () {})
-            .then(function () { renderSending(); })
+            .then(function () { updateParamList(); })
             .then(submitNow, submitNow);
         } catch (e) { submitNow(); }
       });
@@ -297,11 +320,13 @@
 
     function resetBtn() {
       var btn = document.getElementById('sendBtn');
+      stopSendingUI();
       btn.disabled = false; btn.classList.remove('sending');
       btn.textContent = 'SEND'; setStatus('');
     }
 
     function showDone() {
+      stopSendingUI();
       document.getElementById('mainView').classList.add('hidden');
       document.getElementById('doneView').classList.remove('hidden');
       var s = document.getElementById('summary');
