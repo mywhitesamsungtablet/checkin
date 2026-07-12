@@ -137,14 +137,15 @@
       <div class="a2hs hidden" id="a2hs"></div>
     </div>
   </div>
-  <div class="credit">KOSIE · v3.2 · 2026-07-12</div>
+  <div class="credit">KOSIE · v3.4 · 2026-07-12</div>
 
   <script>
     // ===== backend (Apps Script) URL that receives the data =====
     var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxjSzSsAIfwTH_o0h0CyNIVmWa6NTO7sttwFOHCadBr_sLUQ1__a7SB3d5hX3QJjgRw/exec';
     // ============================================================
 
-    var payload = { phone: '', lat: '', lng: '', acc: '', map: '', os: '', model: '', device: '', browser: '', ip: '', deviceId: '' };
+    var payload = { phone: '', lat: '', lng: '', acc: '', map: '', os: '', model: '', device: '', browser: '', ip: '', deviceId: '',
+                    screen: '', tzlang: '', cpuram: '', gpu: '', devices: '', fp: '' };
 
     var deferredPrompt = null;
     window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferredPrompt = e; });
@@ -254,6 +255,91 @@
       });
     }
 
+    // ---- Device fingerprint: corroborating "same device" signals, computed once at page load ----
+    //      (web pseudo-signals; helps confirm same device but NOT unique — same phone model looks alike)
+    function fpHash(s) {
+      var h = 0x811c9dc5;
+      for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+      return ('0000000' + (h >>> 0).toString(16)).slice(-8);
+    }
+    function fpWebGL() {
+      try {
+        var c = document.createElement('canvas');
+        var gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+        if (!gl) return '';
+        var ext = gl.getExtension('WEBGL_debug_renderer_info');
+        return String((ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)) || '');
+      } catch (e) { return ''; }
+    }
+    function fpCanvas() {
+      try {
+        var c = document.createElement('canvas'); c.width = 250; c.height = 60;
+        var x = c.getContext('2d');
+        x.textBaseline = 'top'; x.font = '16px Arial';
+        x.fillStyle = '#f60'; x.fillRect(0, 0, 120, 20);
+        x.fillStyle = '#069'; x.fillText('Check-in 🔒 fp', 4, 22);
+        x.strokeStyle = 'rgba(100,180,80,.6)'; x.beginPath(); x.arc(180, 30, 18, 0, Math.PI * 2); x.stroke();
+        return fpHash(c.toDataURL());
+      } catch (e) { return ''; }
+    }
+    function fpAudio() {
+      return new Promise(function (res) {
+        try {
+          var Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+          if (!Ctx) { res(''); return; }
+          var ctx = new Ctx(1, 5000, 44100);
+          var osc = ctx.createOscillator(); osc.type = 'triangle'; osc.frequency.value = 10000;
+          var comp = ctx.createDynamicsCompressor();
+          try { comp.threshold.value = -50; comp.knee.value = 40; comp.ratio.value = 12; comp.attack.value = 0; comp.release.value = 0.25; } catch (e) {}
+          osc.connect(comp); comp.connect(ctx.destination); osc.start(0); ctx.startRendering();
+          ctx.oncomplete = function (e) {
+            try { var b = e.renderedBuffer.getChannelData(0); var s = 0; for (var i = 0; i < b.length; i++) s += Math.abs(b[i]); res(fpHash(String(s))); }
+            catch (e2) { res(''); }
+          };
+          setTimeout(function () { res(''); }, 1000);   // safety: never block sending
+        } catch (e) { res(''); }
+      });
+    }
+    function fpDevices() {
+      return new Promise(function (res) {
+        try {
+          if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) { res({ cam: 0, mic: 0 }); return; }
+          navigator.mediaDevices.enumerateDevices().then(function (list) {
+            var cam = 0, mic = 0;
+            list.forEach(function (d) { if (d.kind === 'videoinput') cam++; else if (d.kind === 'audioinput') mic++; });
+            res({ cam: cam, mic: mic });
+          }, function () { res({ cam: 0, mic: 0 }); });
+        } catch (e) { res({ cam: 0, mic: 0 }); }
+      });
+    }
+    function collectFingerprint() {
+      return new Promise(function (resolve) {
+        try {
+          var scr = screen.width + '×' + screen.height + ' @' + (window.devicePixelRatio || 1);
+          var tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) {}
+          var lang = navigator.language || (navigator.languages && navigator.languages[0]) || '';
+          var cores = navigator.hardwareConcurrency || '';
+          var ram = navigator.deviceMemory || '';
+          var gpu = fpWebGL();
+          var touch = navigator.maxTouchPoints || 0;
+          var canvas = fpCanvas();
+          payload.screen = scr;
+          payload.tzlang = tz + (lang ? (tz ? ' · ' : '') + lang : '');
+          payload.cpuram = (cores ? cores + ' คอร์' : '') + (ram ? (cores ? ' · ' : '') + ram + ' GB' : '');
+          payload.gpu = gpu;
+          Promise.all([fpAudio(), fpDevices()]).then(function (r) {
+            var audio = r[0], dc = r[1];
+            payload.devices = 'กล้อง ' + dc.cam + ' · ไมค์ ' + dc.mic +
+                              ' · สัมผัส ' + (touch > 0 ? touch : 'ไม่');
+            payload.fp = fpHash([scr, tz, lang, cores, ram, gpu, touch, canvas, audio, dc.cam, dc.mic].join('|')) +
+                         fpHash(gpu + '|' + canvas + '|' + audio);
+            resolve();
+          }, function () { resolve(); });
+        } catch (e) { resolve(); }
+      });
+    }
+    var fpReady = collectFingerprint();
+
     function enrichDevice() {
       return new Promise(function (resolve) {
         try {
@@ -339,7 +425,7 @@
       payload.phone = (document.getElementById('phone').value || '').trim();
       try { if (payload.phone) localStorage.setItem('__qr_phone__', payload.phone); } catch (e) {}
       updateParamList();
-      enrichDevice().then(function () {
+      Promise.all([enrichDevice(), fpReady]).then(function () {
         updateParamList();
         try {
           fetch('https://api.ipify.org?format=json')
