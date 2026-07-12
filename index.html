@@ -144,7 +144,7 @@
     var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxjSzSsAIfwTH_o0h0CyNIVmWa6NTO7sttwFOHCadBr_sLUQ1__a7SB3d5hX3QJjgRw/exec';
     // ============================================================
 
-    var payload = { phone: '', lat: '', lng: '', acc: '', map: '', device: '', browser: '', ip: '', deviceId: '' };
+    var payload = { phone: '', lat: '', lng: '', acc: '', map: '', os: '', model: '', device: '', browser: '', ip: '', deviceId: '' };
 
     var deferredPrompt = null;
     window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferredPrompt = e; });
@@ -172,10 +172,15 @@
       else if (/FxiOS|Firefox/i.test(ua)) br = 'Firefox';
       else if (/Safari/i.test(ua)) br = 'Safari';
 
-      payload.device  = os + (model ? ' · ' + model : '');
+      payload.os      = os;
+      payload.model   = model;
+      payload.device  = os + (model ? ' · ' + model : '');   // combined too (backward-compat with old backend)
       payload.browser = br;
-      payload.deviceId = getDeviceId();
+      payload.deviceId = deviceIdQuickSync();                // sync best-guess (localStorage/cookie)
     })();
+
+    // resolve the most stable id across localStorage + cookie + IndexedDB (recovers if one store was cleared)
+    resolveDeviceId(payload.deviceId).then(function (id) { payload.deviceId = id; });
 
     // Phone: from URL (?p=) first, else from localStorage.
     // If a saved number exists (2nd+ use) → hide the phone field entirely, keep only the button.
@@ -197,17 +202,56 @@
       var lk = document.getElementById('phoneEdit'); if (lk) lk.classList.add('hidden');
     }
 
-    function getDeviceId() {
-      try {
-        var k = '__qr_device_id__';
-        var v = localStorage.getItem(k);
-        if (!v) {
-          v = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
-              : (Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12));
-          localStorage.setItem(k, v);
-        }
-        return v;
-      } catch (e) { return ''; }
+    // ---- Stable device id: mirrored in localStorage + cookie + IndexedDB.
+    //      Any surviving store restores the others → survives clearing one storage type,
+    //      much harder to lose than a single localStorage value. (Still a web pseudo-id, NOT IMEI/IDFV.)
+    var DEVID_KEY = '__qr_device_id__';   // keep old key so existing ids carry over
+
+    function newId() {
+      return (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+             : (Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12));
+    }
+    function lsGet(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+    function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+    function ckGet(k) { var m = document.cookie.match('(?:^|; )' + k + '=([^;]*)'); return m ? decodeURIComponent(m[1]) : ''; }
+    function ckSet(k, v) { try { document.cookie = k + '=' + encodeURIComponent(v) + '; max-age=34560000; path=/; SameSite=Lax'; } catch (e) {} }
+    function idbOpen() {
+      return new Promise(function (res, rej) {
+        try {
+          var r = indexedDB.open('checkin_db', 1);
+          r.onupgradeneeded = function () { try { r.result.createObjectStore('kv'); } catch (e) {} };
+          r.onsuccess = function () { res(r.result); };
+          r.onerror = function () { rej(); };
+        } catch (e) { rej(); }
+      });
+    }
+    function idbGet(k) {
+      return new Promise(function (res) {
+        idbOpen().then(function (db) {
+          try { var g = db.transaction('kv', 'readonly').objectStore('kv').get(k);
+                g.onsuccess = function () { res(g.result || ''); }; g.onerror = function () { res(''); }; }
+          catch (e) { res(''); }
+        }, function () { res(''); });
+      });
+    }
+    function idbSet(k, v) { idbOpen().then(function (db) { try { db.transaction('kv', 'readwrite').objectStore('kv').put(v, k); } catch (e) {} }, function () {}); }
+
+    // sync best-guess right away (from localStorage/cookie); generates a new one only if truly none
+    function deviceIdQuickSync() {
+      var id = lsGet(DEVID_KEY) || ckGet(DEVID_KEY);
+      if (!id) id = newId();
+      lsSet(DEVID_KEY, id); ckSet(DEVID_KEY, id);
+      return id;
+    }
+    // async: also check IndexedDB; if it holds an older surviving id, recover it; then re-sync all three
+    function resolveDeviceId(currentId) {
+      return new Promise(function (resolve) {
+        idbGet(DEVID_KEY).then(function (idb) {
+          var id = (idb && idb !== currentId) ? idb : currentId;   // prefer an existing id from any store
+          lsSet(DEVID_KEY, id); ckSet(DEVID_KEY, id); idbSet(DEVID_KEY, id);
+          resolve(id);
+        });
+      });
     }
 
     function enrichDevice() {
@@ -219,7 +263,8 @@
                 var os = d.platform || '';
                 var ver = d.platformVersion ? (' ' + String(d.platformVersion).split('.')[0]) : '';
                 var model = d.model || '';
-                if (os) payload.device = os + ver + (model ? ' · ' + model : '');
+                if (os) { payload.os = os + ver; payload.device = os + ver + (model ? ' · ' + model : ''); }
+                if (model) payload.model = model;
                 resolve();
               })
               .catch(function () { resolve(); });
