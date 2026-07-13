@@ -137,17 +137,24 @@
       <div class="a2hs hidden" id="a2hs"></div>
     </div>
   </div>
-  <div class="credit">KOSIE · v3.7 · 2026-07-13</div>
+  <div class="credit" id="credit">KOSIE · v3.8 · 2026-07-13</div>
 
   <script>
     // ===== backend (Apps Script) URL that receives the data =====
     var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxjSzSsAIfwTH_o0h0CyNIVmWa6NTO7sttwFOHCadBr_sLUQ1__a7SB3d5hX3QJjgRw/exec';
     // ============================================================
 
+    // เวอร์ชันแอป — แหล่งเดียว: ใช้ทั้งใน payload (ส่งเข้า Sheet) และเครดิตมุมล่าง
+    var APP_VERSION = 'v3.8';
+
     var payload = { phone: '', lat: '', lng: '', acc: '', map: '', os: '', model: '', device: '', browser: '', ip: '', deviceId: '',
                     screen: '', gpu: '', canvas: '', audio: '',
                     tz: '', lang: '', cpu: '', ram: '', cam: '', mic: '', touch: '',   // แยกคอลัมน์
+                    version: APP_VERSION,                                               // เวอร์ชันซอฟต์แวร์ที่เครื่องนี้กำลังรัน
                     tzlang: '', cpuram: '', devices: '' };                              // รวม (เผื่อ backend เก่า)
+
+    // sync เครดิตมุมล่างให้ตรงกับ APP_VERSION เสมอ (แก้เวอร์ชันที่เดียว)
+    (function () { var c = document.getElementById('credit'); if (c) c.textContent = 'KOSIE · ' + APP_VERSION + ' · 2026-07-13'; })();
 
     var deferredPrompt = null;
     window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferredPrompt = e; });
