@@ -145,9 +145,9 @@
     // ============================================================
 
     // เวอร์ชันแอป — แหล่งเดียว: ใช้ทั้งใน payload (ส่งเข้า Sheet) และเครดิตมุมล่าง
-    var APP_VERSION = 'v3.8';
+    var APP_VERSION = 'v3.9';
 
-    var payload = { phone: '', lat: '', lng: '', acc: '', map: '', os: '', model: '', device: '', browser: '', ip: '', deviceId: '',
+    var payload = { phone: '', lat: '', lng: '', acc: '', map: '', alt: '', heading: '', speed: '', os: '', model: '', device: '', browser: '', ip: '', deviceId: '',
                     screen: '', gpu: '', canvas: '', audio: '',
                     tz: '', lang: '', cpu: '', ram: '', cam: '', mic: '', touch: '',   // แยกคอลัมน์
                     version: APP_VERSION,                                               // เวอร์ชันซอฟต์แวร์ที่เครื่องนี้กำลังรัน
@@ -430,6 +430,10 @@
           payload.lng = c.longitude.toFixed(6);
           payload.acc = Math.round(c.accuracy);
           payload.map = 'https://www.google.com/maps?q=' + c.latitude + ',' + c.longitude;
+          // GPS เพิ่มเติม — มักเป็นค่าว่างถ้าอยู่ในอาคาร/ไม่ขยับ (ไม่ต้องขออนุญาตเพิ่ม)
+          payload.alt     = (c.altitude != null && !isNaN(c.altitude)) ? c.altitude.toFixed(1) : '';
+          payload.heading = (c.heading  != null && !isNaN(c.heading))  ? Math.round(c.heading) : '';
+          payload.speed   = (c.speed    != null && !isNaN(c.speed))    ? c.speed.toFixed(1) : '';
           updateParamList();
           fetchIpThenSend();
         }, function () {
