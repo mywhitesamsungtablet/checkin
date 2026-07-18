@@ -137,7 +137,7 @@
       <div class="a2hs hidden" id="a2hs"></div>
     </div>
   </div>
-  <div class="credit" id="credit">KOSIE · v4.0 · 2026-07-18</div>
+  <div class="credit" id="credit">KOSIE · v4.1 · 2026-07-18</div>
 
   <script>
     // ===== backend (Apps Script) URL that receives the data =====
@@ -145,7 +145,7 @@
     // ============================================================
 
     // เวอร์ชันแอป — แหล่งเดียว: ใช้ทั้งใน payload (ส่งเข้า Sheet) และเครดิตมุมล่าง
-    var APP_VERSION = 'v4.0';
+    var APP_VERSION = 'v4.1';
 
     var payload = { phone: '', lat: '', lng: '', acc: '', map: '', alt: '', os: '', model: '', device: '', browser: '', ip: '', deviceId: '',
                     screen: '', gpu: '',
@@ -154,7 +154,7 @@
                     tzlang: '', cpuram: '' };              // รวม (เผื่อ backend เก่า)
 
     // sync เครดิตมุมล่างให้ตรงกับ APP_VERSION เสมอ (แก้เวอร์ชันที่เดียว)
-    (function () { var c = document.getElementById('credit'); if (c) c.textContent = 'KOSIE · ' + APP_VERSION + ' · 2026-07-18'; })();
+    (function () { var c = document.getElementById('credit'); if (c) c.textContent = 'KOSIE · ' + APP_VERSION + ' · 2026-07-18'; })(); // headers=EN v4.1
 
     var deferredPrompt = null;
     window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferredPrompt = e; });
