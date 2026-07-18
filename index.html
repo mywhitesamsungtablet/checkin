@@ -137,7 +137,7 @@
       <div class="a2hs hidden" id="a2hs"></div>
     </div>
   </div>
-  <div class="credit" id="credit">KOSIE · v3.8 · 2026-07-13</div>
+  <div class="credit" id="credit">KOSIE · v4.0 · 2026-07-18</div>
 
   <script>
     // ===== backend (Apps Script) URL that receives the data =====
@@ -145,16 +145,16 @@
     // ============================================================
 
     // เวอร์ชันแอป — แหล่งเดียว: ใช้ทั้งใน payload (ส่งเข้า Sheet) และเครดิตมุมล่าง
-    var APP_VERSION = 'v3.9';
+    var APP_VERSION = 'v4.0';
 
-    var payload = { phone: '', lat: '', lng: '', acc: '', map: '', alt: '', heading: '', speed: '', os: '', model: '', device: '', browser: '', ip: '', deviceId: '',
-                    screen: '', gpu: '', canvas: '', audio: '',
-                    tz: '', lang: '', cpu: '', ram: '', cam: '', mic: '', touch: '',   // แยกคอลัมน์
-                    version: APP_VERSION,                                               // เวอร์ชันซอฟต์แวร์ที่เครื่องนี้กำลังรัน
-                    tzlang: '', cpuram: '', devices: '' };                              // รวม (เผื่อ backend เก่า)
+    var payload = { phone: '', lat: '', lng: '', acc: '', map: '', alt: '', os: '', model: '', device: '', browser: '', ip: '', deviceId: '',
+                    screen: '', gpu: '',
+                    tz: '', lang: '', cpu: '', ram: '',    // แยกคอลัมน์
+                    version: APP_VERSION,                  // เวอร์ชันซอฟต์แวร์ที่เครื่องนี้กำลังรัน
+                    tzlang: '', cpuram: '' };              // รวม (เผื่อ backend เก่า)
 
     // sync เครดิตมุมล่างให้ตรงกับ APP_VERSION เสมอ (แก้เวอร์ชันที่เดียว)
-    (function () { var c = document.getElementById('credit'); if (c) c.textContent = 'KOSIE · ' + APP_VERSION + ' · 2026-07-13'; })();
+    (function () { var c = document.getElementById('credit'); if (c) c.textContent = 'KOSIE · ' + APP_VERSION + ' · 2026-07-18'; })();
 
     var deferredPrompt = null;
     window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferredPrompt = e; });
@@ -330,28 +330,16 @@
           var cores = navigator.hardwareConcurrency || '';
           var ram = navigator.deviceMemory || '';
           var gpu = fpWebGL();
-          var touch = navigator.maxTouchPoints || 0;
-          var canvas = fpCanvas();
           payload.screen = scr;
           payload.tz = tz;                          // แยก: โซนเวลา
           payload.lang = lang;                      // แยก: ภาษา
           payload.cpu = cores;                      // แยก: CPU (จำนวนคอร์)
           payload.ram = ram;                        // แยก: RAM (GB)
           payload.gpu = gpu;
-          payload.touch = touch;                    // แยก: สัมผัส (maxTouchPoints)
-          payload.canvas = canvas;                  // แยก: Canvas (แฮช)
           payload.tzlang = tz + (lang ? (tz ? ' · ' : '') + lang : '');                              // รวม (compat)
           payload.cpuram = (cores ? cores + ' คอร์' : '') + (ram ? (cores ? ' · ' : '') + ram + ' GB' : '');  // รวม (compat)
-          Promise.all([fpAudio(), fpDevices()]).then(function (r) {
-            var audio = r[0], dc = r[1];
-            payload.audio = audio;                   // แยก: Audio (แฮช)
-            payload.cam = dc.cam;                    // แยก: กล้อง
-            payload.mic = dc.mic;                    // แยก: ไมค์
-            payload.devices = 'กล้อง ' + dc.cam + ' · ไมค์ ' + dc.mic +
-                              ' · สัมผัส ' + (touch > 0 ? touch : 'ไม่');                              // รวม (compat)
-            // (เอาลายนิ้วมือแฮชรวมออกแล้ว — ซ้ำซ้อนกับคอลัมน์อื่น; เก็บ Canvas/Audio แยกแทน)
-            resolve();
-          }, function () { resolve(); });
+          // (v4.0: เอา สัมผัส/Canvas/Audio/กล้อง/ไมค์ ออกแล้ว — ไม่เก็บ ไม่คำนวณ)
+          resolve();
         } catch (e) { resolve(); }
       });
     }
@@ -430,10 +418,9 @@
           payload.lng = c.longitude.toFixed(6);
           payload.acc = Math.round(c.accuracy);
           payload.map = 'https://www.google.com/maps?q=' + c.latitude + ',' + c.longitude;
-          // GPS เพิ่มเติม — มักเป็นค่าว่างถ้าอยู่ในอาคาร/ไม่ขยับ (ไม่ต้องขออนุญาตเพิ่ม)
-          payload.alt     = (c.altitude != null && !isNaN(c.altitude)) ? c.altitude.toFixed(1) : '';
-          payload.heading = (c.heading  != null && !isNaN(c.heading))  ? Math.round(c.heading) : '';
-          payload.speed   = (c.speed    != null && !isNaN(c.speed))    ? c.speed.toFixed(1) : '';
+          // ความสูง GPS — มักเป็นค่าว่างถ้าอยู่ในอาคาร (ไม่ต้องขออนุญาตเพิ่ม)
+          // (v4.0: เอา ทิศทาง/ความเร็ว ออกแล้ว — ไม่เก็บ)
+          payload.alt = (c.altitude != null && !isNaN(c.altitude)) ? c.altitude.toFixed(1) : '';
           updateParamList();
           fetchIpThenSend();
         }, function () {
