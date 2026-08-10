@@ -103,12 +103,14 @@
     .a2hs-hint { font-size: 13px; color: #555; margin-top: 10px; line-height: 1.5;
                  background: #f4f6f5; border-radius: 8px; padding: 10px 12px; text-align: center; }
     .hidden { display: none; }
-    /* แบนเนอร์แจ้ง "วันนี้กด time stamp ไปแล้ว" (client-side, เวลาครั้งแรกของวัน) */
+    /* แบนเนอร์เช็คสถานะ Time Stamp วันนี้ (client-side) — เขียว=กดแล้ว / แดง=ยังไม่เช็คอิน / ส้ม=ลืมกดออก */
     .tsbanner { background: #e7f6f2; border: 1.5px solid #0e8a78; color: #0b6b5f;
                 border-radius: 12px; padding: 12px 14px; margin: 0 0 16px;
                 font-size: 15px; line-height: 1.45; text-align: center; }
-    .tsbanner b { font-size: 20px; color: #0b6b5f; }
-    .tsb-sub { display: block; margin-top: 4px; font-size: 12.5px; color: #5a7a74; }
+    .tsbanner b { font-size: 20px; color: inherit; }
+    .tsbanner.warn    { background: #fdecea; border-color: #d32f2f; color: #b71c1c; }
+    .tsbanner.caution { background: #fff6e5; border-color: #f0a500; color: #8a6100; }
+    .tsb-sub { display: block; margin-top: 4px; font-size: 12.5px; color: inherit; opacity: .8; }
     .credit {
       position: fixed; right: 7px; bottom: 5px;
       font-size: 9px; letter-spacing: .3px; line-height: 1;
@@ -145,7 +147,7 @@
       <div class="a2hs hidden" id="a2hs"></div>
     </div>
   </div>
-  <div class="credit" id="credit">KOSIE · v4.4 · 2026-08-10</div>
+  <div class="credit" id="credit">KOSIE · v4.5 · 2026-08-11</div>
 
   <script>
     // ===== backend (Apps Script) URL that receives the data =====
@@ -153,7 +155,7 @@
     // ============================================================
 
     // เวอร์ชันแอป — แหล่งเดียว: ใช้ทั้งใน payload (ส่งเข้า Sheet) และเครดิตมุมล่าง
-    var APP_VERSION = 'v4.4';
+    var APP_VERSION = 'v4.5';
 
     var payload = { phone: '', lat: '', lng: '', acc: '', map: '', alt: '', os: '', model: '', device: '', browser: '', ip: '', deviceId: '',
                     screen: '', gpu: '',
@@ -161,11 +163,14 @@
                     version: APP_VERSION,                  // เวอร์ชันซอฟต์แวร์ที่เครื่องนี้กำลังรัน
                     tzlang: '', cpuram: '' };              // รวม (เผื่อ backend เก่า)
 
-    // ===== "วันนี้กด Time Stamp ไปแล้ว" — จำ "เวลาครั้งแรกของวัน" ต่อเครื่อง (localStorage) =====
-    // (client-side ล้วน ไม่แตะ backend; กดซ้ำไม่ทับเวลาแรก; ข้ามวันรีเซ็ตเอง)
-    var TS_KEY = '__ts_first_today__';
-    var pendingPressTime = '';   // เวลาที่เพิ่งกดปุ่ม — commit เป็น "ครั้งแรกของวัน" เมื่อส่งสำเร็จ
+    // ===== แบนเนอร์เช็คสถานะ Time Stamp วันนี้ (client-side ล้วน ไม่แตะ backend) =====
+    // ปุ่มเดียว: กดเช้า=เข้า, กดเย็น=ออก (อนุมานจากเวลา). จำ "ครั้งแรก" + "ครั้งล่าสุด" ของวัน. ข้ามวันรีเซ็ตเอง.
+    var TS_KEY = '__ts_today__';
+    var MORNING_CUTOFF = 8 * 60 + 15;    // 8:15 — เลยนี้แล้วยังไม่กดเลย = เตือนแดง "ยังไม่เช็คอิน"
+    var EVENING_CUTOFF = 17 * 60 + 15;   // 17:15 — เลยนี้แล้วครั้งล่าสุดยังเป็นตอนเช้า = เตือนส้ม "ลืมกดออก"
+    var pendingPressTime = '', pendingPressMin = 0;   // เวลาที่เพิ่งกด (commit เมื่อส่งสำเร็จ)
 
+    function nowMin() { var d = new Date(); return d.getHours() * 60 + d.getMinutes(); }
     function nowHHMM() {
       var d = new Date(), h = d.getHours(), m = d.getMinutes();
       return h + ':' + (m < 10 ? '0' + m : m);
@@ -174,30 +179,58 @@
       var d = new Date();
       return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
     }
-    function getFirstStampToday() {
+    function getStampToday() {          // คืน {d,fT,fM,lT,lM} ของวันนี้ หรือ null
       var raw = lsGet(TS_KEY);
-      if (!raw) return '';
-      try { var o = JSON.parse(raw); return (o && o.d === todayKey()) ? o.t : ''; } catch (e) { return ''; }
+      if (!raw) return null;
+      try { var o = JSON.parse(raw); return (o && o.d === todayKey()) ? o : null; } catch (e) { return null; }
     }
-    function recordFirstStampToday(t) {
-      if (getFirstStampToday()) return;   // มีของวันนี้แล้ว → เก็บเวลา "ครั้งแรก" ไว้ ไม่ทับ
-      lsSet(TS_KEY, JSON.stringify({ d: todayKey(), t: t || nowHHMM() }));
+    function recordStampToday(t, mmin) {
+      t = t || nowHHMM(); if (mmin == null) mmin = nowMin();
+      var o = getStampToday();
+      if (!o) o = { d: todayKey(), fT: t, fM: mmin, lT: t, lM: mmin };   // ครั้งแรกของวัน
+      else { o.lT = t; o.lM = mmin; }                                    // อัปเดตครั้งล่าสุด (เก็บครั้งแรกไว้)
+      lsSet(TS_KEY, JSON.stringify(o));
+    }
+    // ย้ายข้อมูลจากคีย์เก่า v4.4 (__ts_first_today__ = {d,t}) มาคีย์ใหม่ กันเตือนผิดวันอัปเกรด
+    function migrateOldTsKey() {
+      try {
+        if (getStampToday()) return;
+        var old = lsGet('__ts_first_today__'); if (!old) return;
+        var o = JSON.parse(old);
+        if (o && o.d === todayKey() && o.t) {
+          var p = String(o.t).split(':'), mm = (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0);
+          lsSet(TS_KEY, JSON.stringify({ d: o.d, fT: o.t, fM: mm, lT: o.t, lM: mm }));
+        }
+      } catch (e) {}
     }
     function showTodayBanner() {
       var el = document.getElementById('tsBanner');
       if (!el) return;
-      var t = getFirstStampToday();
-      if (t) {
-        el.innerHTML = '✅ วันนี้คุณกด Time Stamp ไปแล้วเมื่อ <b>' + t + ' น.</b>' +
-                       '<span class="tsb-sub">กดซ้ำได้ ไม่มีปัญหา — ระบบจำเวลาครั้งแรกของวันนี้ไว้ให้แล้ว</span>';
-        el.classList.remove('hidden');
+      el.classList.remove('warn', 'caution');
+      var o = getStampToday(), now = nowMin(), html;
+      if (!o) {
+        // ยังไม่กดเลยวันนี้
+        if (now < MORNING_CUTOFF) { el.classList.add('hidden'); return; }   // ก่อน 8:15 ยังไม่เตือน
+        el.classList.add('warn');
+        html = '⚠️ วันนี้ยังไม่ได้กด Time Stamp!<span class="tsb-sub">เข้างานแล้วอย่าลืมกดปุ่มด้านล่าง</span>';
+      } else if (now >= EVENING_CUTOFF && o.lM < EVENING_CUTOFF) {
+        // กดตอนเช้าแล้ว แต่ยังไม่ได้กดออก (เลย 17:15)
+        el.classList.add('caution');
+        html = '⏰ เข้างานแล้วเมื่อ <b>' + o.fT + ' น.</b><span class="tsb-sub">ใกล้เลิกงาน — อย่าลืมกดอีกครั้งเพื่อบันทึกออกงาน</span>';
+      } else if (o.lM >= EVENING_CUTOFF && o.lT !== o.fT) {
+        // เข้า + ออก ครบแล้ว
+        html = '✅ วันนี้เรียบร้อย — เข้า <b>' + o.fT + ' น.</b> · ออก <b>' + o.lT + ' น.</b>';
       } else {
-        el.classList.add('hidden');
+        // กดแล้ว (สบายใจ) — โชว์เวลาครั้งแรกของวัน
+        html = '✅ วันนี้คุณกด Time Stamp แล้วเมื่อ <b>' + o.fT + ' น.</b>' +
+               '<span class="tsb-sub">กดซ้ำได้ ไม่มีปัญหา — ระบบจำเวลาครั้งแรกของวันนี้ไว้ให้แล้ว</span>';
       }
+      el.innerHTML = html;
+      el.classList.remove('hidden');
     }
 
     // sync เครดิตมุมล่างให้ตรงกับ APP_VERSION เสมอ (แก้เวอร์ชันที่เดียว)
-    (function () { var c = document.getElementById('credit'); if (c) c.textContent = 'KOSIE · ' + APP_VERSION + ' · 2026-08-10'; })(); // v4.4 already-stamped banner
+    (function () { var c = document.getElementById('credit'); if (c) c.textContent = 'KOSIE · ' + APP_VERSION + ' · 2026-08-11'; })(); // v4.5 smart status banner
 
     var deferredPrompt = null;
     window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferredPrompt = e; });
@@ -245,7 +278,8 @@
       if (saved) { el.value = saved; hidePhoneRow(); }
     })();
 
-    // แสดงแบนเนอร์ "วันนี้กด Time Stamp ไปแล้วเมื่อ HH:MM" ตอนเปิดหน้า (ถ้ากดของวันนี้ไปแล้ว)
+    // ตอนเปิดหน้า: ย้ายข้อมูลคีย์เก่า (ถ้ามี) แล้วแสดงแบนเนอร์สถานะวันนี้ (เขียว/แดง/ส้ม)
+    migrateOldTsKey();
     showTodayBanner();
 
     function hidePhoneRow() {
@@ -455,7 +489,7 @@
     function startSend() {
       var btn = document.getElementById('sendBtn');
       btn.disabled = true; setErr('');
-      pendingPressTime = nowHHMM();   // เวลาที่กด (จะ commit เป็นครั้งแรกของวันเมื่อส่งสำเร็จ)
+      pendingPressTime = nowHHMM(); pendingPressMin = nowMin();   // เวลาที่กด (commit เมื่อส่งสำเร็จ)
       startSendingUI();
 
       if (navigator.geolocation) {
@@ -516,8 +550,8 @@
 
     function showDone() {
       stopSendingUI();
-      recordFirstStampToday(pendingPressTime);   // จำ "ครั้งแรกของวันนี้" (ถ้ายังไม่มี)
-      showTodayBanner();                          // อัปเดตแบนเนอร์ (เห็นเมื่อกลับมาหน้าหลัก)
+      recordStampToday(pendingPressTime, pendingPressMin);   // จำครั้งแรก + อัปเดตครั้งล่าสุดของวันนี้
+      showTodayBanner();                                     // อัปเดตแบนเนอร์ (เห็นเมื่อกลับมาหน้าหลัก)
       document.getElementById('mainView').classList.add('hidden');
       document.getElementById('doneView').classList.remove('hidden');
       var s = document.getElementById('summary');
