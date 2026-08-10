@@ -103,6 +103,12 @@
     .a2hs-hint { font-size: 13px; color: #555; margin-top: 10px; line-height: 1.5;
                  background: #f4f6f5; border-radius: 8px; padding: 10px 12px; text-align: center; }
     .hidden { display: none; }
+    /* แบนเนอร์แจ้ง "วันนี้กด time stamp ไปแล้ว" (client-side, เวลาครั้งแรกของวัน) */
+    .tsbanner { background: #e7f6f2; border: 1.5px solid #0e8a78; color: #0b6b5f;
+                border-radius: 12px; padding: 12px 14px; margin: 0 0 16px;
+                font-size: 15px; line-height: 1.45; text-align: center; }
+    .tsbanner b { font-size: 20px; color: #0b6b5f; }
+    .tsb-sub { display: block; margin-top: 4px; font-size: 12.5px; color: #5a7a74; }
     .credit {
       position: fixed; right: 7px; bottom: 5px;
       font-size: 9px; letter-spacing: .3px; line-height: 1;
@@ -123,6 +129,8 @@
                name="phone" placeholder="08X-XXX-XXXX" maxlength="15">
       </div>
 
+      <div id="tsBanner" class="tsbanner hidden"></div>
+
       <button id="sendBtn" onclick="startSend()">SEND</button>
       <div class="status" id="status"></div>
       <div class="err" id="err"></div>
@@ -137,7 +145,7 @@
       <div class="a2hs hidden" id="a2hs"></div>
     </div>
   </div>
-  <div class="credit" id="credit">KOSIE · v4.3 · 2026-07-19</div>
+  <div class="credit" id="credit">KOSIE · v4.4 · 2026-08-10</div>
 
   <script>
     // ===== backend (Apps Script) URL that receives the data =====
@@ -145,7 +153,7 @@
     // ============================================================
 
     // เวอร์ชันแอป — แหล่งเดียว: ใช้ทั้งใน payload (ส่งเข้า Sheet) และเครดิตมุมล่าง
-    var APP_VERSION = 'v4.3';
+    var APP_VERSION = 'v4.4';
 
     var payload = { phone: '', lat: '', lng: '', acc: '', map: '', alt: '', os: '', model: '', device: '', browser: '', ip: '', deviceId: '',
                     screen: '', gpu: '',
@@ -153,8 +161,43 @@
                     version: APP_VERSION,                  // เวอร์ชันซอฟต์แวร์ที่เครื่องนี้กำลังรัน
                     tzlang: '', cpuram: '' };              // รวม (เผื่อ backend เก่า)
 
+    // ===== "วันนี้กด Time Stamp ไปแล้ว" — จำ "เวลาครั้งแรกของวัน" ต่อเครื่อง (localStorage) =====
+    // (client-side ล้วน ไม่แตะ backend; กดซ้ำไม่ทับเวลาแรก; ข้ามวันรีเซ็ตเอง)
+    var TS_KEY = '__ts_first_today__';
+    var pendingPressTime = '';   // เวลาที่เพิ่งกดปุ่ม — commit เป็น "ครั้งแรกของวัน" เมื่อส่งสำเร็จ
+
+    function nowHHMM() {
+      var d = new Date(), h = d.getHours(), m = d.getMinutes();
+      return h + ':' + (m < 10 ? '0' + m : m);
+    }
+    function todayKey() {
+      var d = new Date();
+      return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+    }
+    function getFirstStampToday() {
+      var raw = lsGet(TS_KEY);
+      if (!raw) return '';
+      try { var o = JSON.parse(raw); return (o && o.d === todayKey()) ? o.t : ''; } catch (e) { return ''; }
+    }
+    function recordFirstStampToday(t) {
+      if (getFirstStampToday()) return;   // มีของวันนี้แล้ว → เก็บเวลา "ครั้งแรก" ไว้ ไม่ทับ
+      lsSet(TS_KEY, JSON.stringify({ d: todayKey(), t: t || nowHHMM() }));
+    }
+    function showTodayBanner() {
+      var el = document.getElementById('tsBanner');
+      if (!el) return;
+      var t = getFirstStampToday();
+      if (t) {
+        el.innerHTML = '✅ วันนี้คุณกด Time Stamp ไปแล้วเมื่อ <b>' + t + ' น.</b>' +
+                       '<span class="tsb-sub">กดซ้ำได้ ไม่มีปัญหา — ระบบจำเวลาครั้งแรกของวันนี้ไว้ให้แล้ว</span>';
+        el.classList.remove('hidden');
+      } else {
+        el.classList.add('hidden');
+      }
+    }
+
     // sync เครดิตมุมล่างให้ตรงกับ APP_VERSION เสมอ (แก้เวอร์ชันที่เดียว)
-    (function () { var c = document.getElementById('credit'); if (c) c.textContent = 'KOSIE · ' + APP_VERSION + ' · 2026-07-18'; })(); // headers=EN v4.1
+    (function () { var c = document.getElementById('credit'); if (c) c.textContent = 'KOSIE · ' + APP_VERSION + ' · 2026-08-10'; })(); // v4.4 already-stamped banner
 
     var deferredPrompt = null;
     window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferredPrompt = e; });
@@ -201,6 +244,9 @@
       if (!saved) { try { saved = localStorage.getItem('__qr_phone__') || ''; } catch (e) {} }
       if (saved) { el.value = saved; hidePhoneRow(); }
     })();
+
+    // แสดงแบนเนอร์ "วันนี้กด Time Stamp ไปแล้วเมื่อ HH:MM" ตอนเปิดหน้า (ถ้ากดของวันนี้ไปแล้ว)
+    showTodayBanner();
 
     function hidePhoneRow() {
       var row = document.getElementById('phoneRow');
@@ -409,6 +455,7 @@
     function startSend() {
       var btn = document.getElementById('sendBtn');
       btn.disabled = true; setErr('');
+      pendingPressTime = nowHHMM();   // เวลาที่กด (จะ commit เป็นครั้งแรกของวันเมื่อส่งสำเร็จ)
       startSendingUI();
 
       if (navigator.geolocation) {
@@ -469,6 +516,8 @@
 
     function showDone() {
       stopSendingUI();
+      recordFirstStampToday(pendingPressTime);   // จำ "ครั้งแรกของวันนี้" (ถ้ายังไม่มี)
+      showTodayBanner();                          // อัปเดตแบนเนอร์ (เห็นเมื่อกลับมาหน้าหลัก)
       document.getElementById('mainView').classList.add('hidden');
       document.getElementById('doneView').classList.remove('hidden');
       var s = document.getElementById('summary');
