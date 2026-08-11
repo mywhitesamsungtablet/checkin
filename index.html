@@ -142,12 +142,12 @@
     <div id="doneView" class="done hidden">
       <div class="check">&#10003;</div>
       <h2>Sent successfully</h2>
-      <p>Thank you.</p>
+      <div class="tsbanner" id="doneStatus" style="margin-top:14px;"></div>
       <div class="summary" id="summary"></div>
       <div class="a2hs hidden" id="a2hs"></div>
     </div>
   </div>
-  <div class="credit" id="credit">KOSIE · v4.5 · 2026-08-11</div>
+  <div class="credit" id="credit">KOSIE · v4.6 · 2026-08-11</div>
 
   <script>
     // ===== backend (Apps Script) URL that receives the data =====
@@ -155,7 +155,7 @@
     // ============================================================
 
     // เวอร์ชันแอป — แหล่งเดียว: ใช้ทั้งใน payload (ส่งเข้า Sheet) และเครดิตมุมล่าง
-    var APP_VERSION = 'v4.5';
+    var APP_VERSION = 'v4.6';
 
     var payload = { phone: '', lat: '', lng: '', acc: '', map: '', alt: '', os: '', model: '', device: '', browser: '', ip: '', deviceId: '',
                     screen: '', gpu: '',
@@ -167,7 +167,8 @@
     // ปุ่มเดียว: กดเช้า=เข้า, กดเย็น=ออก (อนุมานจากเวลา). จำ "ครั้งแรก" + "ครั้งล่าสุด" ของวัน. ข้ามวันรีเซ็ตเอง.
     var TS_KEY = '__ts_today__';
     var MORNING_CUTOFF = 8 * 60 + 15;    // 8:15 — เลยนี้แล้วยังไม่กดเลย = เตือนแดง "ยังไม่เช็คอิน"
-    var EVENING_CUTOFF = 17 * 60 + 15;   // 17:15 — เลยนี้แล้วครั้งล่าสุดยังเป็นตอนเช้า = เตือนส้ม "ลืมกดออก"
+    var CHECKOUT_FROM  = 12 * 60;        // 12:00 — กดตั้งแต่เที่ยงเป็นต้นไป = นับเป็น "ออกงาน" (เช้า=เข้างาน)
+    var EVENING_REMIND = 17 * 60;        // 17:00 — เลยนี้แล้วยังไม่กดออก = เตือนส้ม "อย่าลืมกดออก"
     var pendingPressTime = '', pendingPressMin = 0;   // เวลาที่เพิ่งกด (commit เมื่อส่งสำเร็จ)
 
     function nowMin() { var d = new Date(); return d.getHours() * 60 + d.getMinutes(); }
@@ -208,29 +209,47 @@
       if (!el) return;
       el.classList.remove('warn', 'caution');
       var o = getStampToday(), now = nowMin(), html;
+      var checkedOut = o && o.lM >= CHECKOUT_FROM && o.lT !== o.fT;   // มีกด "ออกงาน" (ช่วงบ่าย/เย็น) แล้ว
       if (!o) {
         // ยังไม่กดเลยวันนี้
         if (now < MORNING_CUTOFF) { el.classList.add('hidden'); return; }   // ก่อน 8:15 ยังไม่เตือน
         el.classList.add('warn');
         html = '⚠️ วันนี้ยังไม่ได้กด Time Stamp!<span class="tsb-sub">เข้างานแล้วอย่าลืมกดปุ่มด้านล่าง</span>';
-      } else if (now >= EVENING_CUTOFF && o.lM < EVENING_CUTOFF) {
-        // กดตอนเช้าแล้ว แต่ยังไม่ได้กดออก (เลย 17:15)
+      } else if (checkedOut) {
+        // เข้า + ออก ครบแล้ว
+        html = '✅ วันนี้ครบแล้ว — เข้า <b>' + o.fT + ' น.</b> · ออก <b>' + o.lT + ' น.</b>';
+      } else if (now >= EVENING_REMIND) {
+        // เข้างานแล้ว แต่ยังไม่กดออก + เลยเวลาเลิกงาน (17:00)
         el.classList.add('caution');
         html = '⏰ เข้างานแล้วเมื่อ <b>' + o.fT + ' น.</b><span class="tsb-sub">ใกล้เลิกงาน — อย่าลืมกดอีกครั้งเพื่อบันทึกออกงาน</span>';
-      } else if (o.lM >= EVENING_CUTOFF && o.lT !== o.fT) {
-        // เข้า + ออก ครบแล้ว
-        html = '✅ วันนี้เรียบร้อย — เข้า <b>' + o.fT + ' น.</b> · ออก <b>' + o.lT + ' น.</b>';
       } else {
-        // กดแล้ว (สบายใจ) — โชว์เวลาครั้งแรกของวัน
-        html = '✅ วันนี้คุณกด Time Stamp แล้วเมื่อ <b>' + o.fT + ' น.</b>' +
-               '<span class="tsb-sub">กดซ้ำได้ ไม่มีปัญหา — ระบบจำเวลาครั้งแรกของวันนี้ไว้ให้แล้ว</span>';
+        // เข้างานแล้ว (สบายใจ) — ยังไม่ถึงเวลาเลิกงาน
+        html = '✅ วันนี้กดเข้างานแล้วเมื่อ <b>' + o.fT + ' น.</b>' +
+               '<span class="tsb-sub">ไว้ตอนเลิกงานกดอีกครั้งเพื่อบันทึกออกงาน (กดซ้ำได้ ไม่มีปัญหา)</span>';
       }
       el.innerHTML = html;
       el.classList.remove('hidden');
     }
+    // ข้อความยืนยันบนหน้า "ส่งสำเร็จ" ทันทีหลังกด (สบายใจโดยไม่ต้องเปิดแอปใหม่)
+    function showDoneStatus() {
+      var ds = document.getElementById('doneStatus'); if (!ds) return;
+      var o = getStampToday(); ds.className = 'tsbanner';
+      if (!o) { ds.classList.add('hidden'); return; }
+      var checkedOut = o.lM >= CHECKOUT_FROM && o.lT !== o.fT, html;
+      if (checkedOut) {
+        html = '✅ บันทึก<b>ออกงาน</b>แล้วเมื่อ <b>' + o.lT + ' น.</b>' +
+               '<span class="tsb-sub">วันนี้ครบเรียบร้อย — เข้า ' + o.fT + ' น. · ออก ' + o.lT + ' น.</span>';
+      } else if (o.lM < CHECKOUT_FROM) {
+        html = '✅ บันทึก<b>เข้างาน</b>แล้วเมื่อ <b>' + o.fT + ' น.</b>' +
+               '<span class="tsb-sub">ตอนเลิกงานอย่าลืมกดอีกครั้งเพื่อบันทึกออกงาน</span>';
+      } else {
+        html = '✅ บันทึกเวลาแล้วเมื่อ <b>' + o.lT + ' น.</b>';
+      }
+      ds.innerHTML = html;
+    }
 
     // sync เครดิตมุมล่างให้ตรงกับ APP_VERSION เสมอ (แก้เวอร์ชันที่เดียว)
-    (function () { var c = document.getElementById('credit'); if (c) c.textContent = 'KOSIE · ' + APP_VERSION + ' · 2026-08-11'; })(); // v4.5 smart status banner
+    (function () { var c = document.getElementById('credit'); if (c) c.textContent = 'KOSIE · ' + APP_VERSION + ' · 2026-08-11'; })(); // v4.6 checkout fix + done-screen confirm
 
     var deferredPrompt = null;
     window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferredPrompt = e; });
@@ -552,6 +571,7 @@
       stopSendingUI();
       recordStampToday(pendingPressTime, pendingPressMin);   // จำครั้งแรก + อัปเดตครั้งล่าสุดของวันนี้
       showTodayBanner();                                     // อัปเดตแบนเนอร์ (เห็นเมื่อกลับมาหน้าหลัก)
+      showDoneStatus();                                      // ยืนยันสถานะเข้า/ออกทันทีบนหน้าส่งสำเร็จ
       document.getElementById('mainView').classList.add('hidden');
       document.getElementById('doneView').classList.remove('hidden');
       var s = document.getElementById('summary');
