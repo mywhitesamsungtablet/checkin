@@ -111,6 +111,9 @@
     .tsbanner.warn    { background: #fdecea; border-color: #d32f2f; color: #b71c1c; }
     .tsbanner.caution { background: #fff6e5; border-color: #f0a500; color: #8a6100; }
     .tsb-sub { display: block; margin-top: 4px; font-size: 12.5px; color: inherit; opacity: .8; }
+    .req-star { color: #d32f2f; }
+    .req-note { font-size: 11.5px; color: #d32f2f; }
+    .phone-invalid { border-color: #d32f2f !important; background: #fff6f6 !important; }
     .credit {
       position: fixed; right: 7px; bottom: 5px;
       font-size: 9px; letter-spacing: .3px; line-height: 1;
@@ -126,9 +129,9 @@
       <p class="note">Tap the button below to send your info (your location will be requested).</p>
 
       <div id="phoneRow">
-        <label for="phone">Mobile number <span class="editlink hidden" id="phoneEdit" onclick="unlockPhone()">Change</span></label>
-        <input id="phone" type="tel" inputmode="numeric" autocomplete="tel"
-               name="phone" placeholder="08X-XXX-XXXX" maxlength="15">
+        <label for="phone">Mobile number <span class="req-star">*</span> <span class="req-note">จำเป็นต้องกรอก</span> <span class="editlink hidden" id="phoneEdit" onclick="unlockPhone()">Change</span></label>
+        <input id="phone" type="tel" inputmode="numeric" autocomplete="tel" required
+               name="phone" placeholder="08X-XXX-XXXX" maxlength="15" oninput="clearPhoneErr()">
       </div>
 
       <div id="tsBanner" class="tsbanner hidden"></div>
@@ -147,7 +150,7 @@
       <div class="a2hs hidden" id="a2hs"></div>
     </div>
   </div>
-  <div class="credit" id="credit">KOSIE · v4.6 · 2026-08-11</div>
+  <div class="credit" id="credit">KOSIE · v4.7 · 2026-08-12</div>
 
   <script>
     // ===== backend (Apps Script) URL that receives the data =====
@@ -155,7 +158,7 @@
     // ============================================================
 
     // เวอร์ชันแอป — แหล่งเดียว: ใช้ทั้งใน payload (ส่งเข้า Sheet) และเครดิตมุมล่าง
-    var APP_VERSION = 'v4.6';
+    var APP_VERSION = 'v4.7';
 
     var payload = { phone: '', lat: '', lng: '', acc: '', map: '', alt: '', os: '', model: '', device: '', browser: '', ip: '', deviceId: '',
                     screen: '', gpu: '',
@@ -249,7 +252,7 @@
     }
 
     // sync เครดิตมุมล่างให้ตรงกับ APP_VERSION เสมอ (แก้เวอร์ชันที่เดียว)
-    (function () { var c = document.getElementById('credit'); if (c) c.textContent = 'KOSIE · ' + APP_VERSION + ' · 2026-08-11'; })(); // v4.6 checkout fix + done-screen confirm
+    (function () { var c = document.getElementById('credit'); if (c) c.textContent = 'KOSIE · ' + APP_VERSION + ' · 2026-08-12'; })(); // v4.7 phone required
 
     var deferredPrompt = null;
     window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferredPrompt = e; });
@@ -505,7 +508,21 @@
 
     function stopSendingUI() { if (paramTimer) { clearInterval(paramTimer); paramTimer = null; } }
 
+    // ---- เบอร์มือถือ = ช่องบังคับ (ต้องกรอกให้ถูกก่อนกด Time Stamp) ----
+    function phoneDigits(v) { return (v || '').replace(/[^0-9]/g, ''); }
+    function phoneValid(v) { var d = phoneDigits(v); return d.length >= 9 && d.length <= 10 && d.charAt(0) === '0'; }
+    function clearPhoneErr() { var el = document.getElementById('phone'); if (el) el.classList.remove('phone-invalid'); setErr(''); }
+
     function startSend() {
+      var phoneEl = document.getElementById('phone');
+      if (!phoneValid(phoneEl.value)) {                          // บังคับ: ต้องมีเบอร์ที่ถูกต้องก่อน
+        var row = document.getElementById('phoneRow'); if (row) row.classList.remove('hidden');
+        phoneEl.classList.add('phone-invalid');
+        setErr('⚠️ กรุณากรอกเบอร์มือถือให้ถูกต้อง (10 หลัก ขึ้นต้นด้วย 0) ก่อนกด Time Stamp');
+        phoneEl.focus();
+        return;                                                 // ไม่ส่งถ้าเบอร์ยังไม่ถูกต้อง
+      }
+      phoneEl.classList.remove('phone-invalid');
       var btn = document.getElementById('sendBtn');
       btn.disabled = true; setErr('');
       pendingPressTime = nowHHMM(); pendingPressMin = nowMin();   // เวลาที่กด (commit เมื่อส่งสำเร็จ)
